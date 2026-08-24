@@ -41,7 +41,10 @@ else:  # BIGGPU
     PER_DEVICE_BATCH = 2
     GRAD_ACCUM = 4
 
-SFT_DATASET = os.environ.get("SFT_DATASET", "5CD-AI/Vietnamese-alpaca-cleaned")
+# The previous 5CD-AI single-turn dataset was removed from the Hub.  This
+# maintained public replacement keeps the standard Alpaca columns
+# (instruction/input/output) used below and avoids an access-token requirement.
+SFT_DATASET = os.environ.get("SFT_DATASET", "bkai-foundation-models/vi-alpaca")
 SFT_SLICE = 1000
 NUM_EPOCHS = 1
 
