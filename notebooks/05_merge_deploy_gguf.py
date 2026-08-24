@@ -67,6 +67,11 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 )
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
+if not tokenizer.chat_template:
+    tokenizer.chat_template = """{% for message in messages %}<|im_start|>{{ message['role'] }}
+{{ message['content'] }}<|im_end|>
+{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant
+{% endif %}"""
 
 # ``adapters/dpo`` is standalone: it starts from SFT weights and is optimized
 # with DPO in NB3. Loading only DPO avoids applying SFT twice during merge.

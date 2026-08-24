@@ -108,6 +108,12 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
     print("Set tokenizer.pad_token = eos_token")
+if not tokenizer.chat_template:
+    tokenizer.chat_template = """{% for message in messages %}<|im_start|>{{ message['role'] }}
+{{ message['content'] }}<|im_end|>
+{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant
+{% endif %}"""
+    print("Set Qwen ChatML fallback template")
 
 # %%
 model = FastLanguageModel.get_peft_model(
@@ -180,6 +186,7 @@ sft_config = SFTConfig(
     seed=42,
     max_length=MAX_LEN,
     dataset_text_field="text",
+    dataset_num_proc=1,         # Windows multiprocessing is not reliable here
     report_to="none",
 )
 

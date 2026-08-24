@@ -94,6 +94,11 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 )
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
+if not tokenizer.chat_template:
+    tokenizer.chat_template = """{% for message in messages %}<|im_start|>{{ message['role'] }}
+{{ message['content'] }}<|im_end|>
+{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant
+{% endif %}"""
 
 # ``default`` is intentional: PEFT writes a selected default adapter at the
 # root of DPO_OUT, so DPO_OUT/adapter_config.json is the required artifact.
@@ -139,6 +144,7 @@ dpo_config = DPOConfig(
     gradient_checkpointing=True,
     gradient_checkpointing_kwargs={"use_reentrant": False},
     loss_type="sigmoid",         # DPO standard (alternatives: ipo, hinge, kto)
+    dataset_num_proc=1,           # avoids Windows worker crashes during tokenization
     report_to="none",
     model_adapter_name="default",
     ref_adapter_name="reference",

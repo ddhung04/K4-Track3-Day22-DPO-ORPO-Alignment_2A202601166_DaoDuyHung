@@ -64,6 +64,11 @@ assert ADAPTER_DIR.exists(), f"NB1 must run first — {ADAPTER_DIR} missing"
 tokenizer = AutoTokenizer.from_pretrained(ADAPTER_DIR)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
+if not tokenizer.chat_template:
+    tokenizer.chat_template = """{% for message in messages %}<|im_start|>{{ message['role'] }}
+{{ message['content'] }}<|im_end|>
+{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant
+{% endif %}"""
 print(f"Tokenizer: {tokenizer.__class__.__name__}  vocab={tokenizer.vocab_size:,}")
 
 # %% [markdown]
