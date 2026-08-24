@@ -56,7 +56,7 @@ the core notebooks from PowerShell, run the following in order:
 
 ```powershell
 .\.venv-gpu\Scripts\jupytext.exe --to notebook --update notebooks\01_sft_mini.py
-.\.venv-gpu\Scripts\jupyter.exe nbconvert --to notebook --execute --inplace notebooks\01_sft_mini.ipynb
+.\.venv-gpu\Scripts\jupyter.exe nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 notebooks\01_sft_mini.ipynb
 # Repeat the same two commands for 02_preference_data, 03_dpo_train, 04_compare_and_eval.
 ```
 

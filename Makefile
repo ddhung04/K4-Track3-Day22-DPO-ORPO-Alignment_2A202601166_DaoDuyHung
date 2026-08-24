@@ -49,27 +49,27 @@ smoke: ## 2-step training run on each notebook to verify imports + GPU
 
 sft: ## NB1 — build SFT-mini checkpoint (~10 min T4 / ~5 min A100)
 	@$(JUPYTEXT) --to notebook --update notebooks/01_sft_mini.py
-	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/01_sft_mini.ipynb
+	@$(JUPYTER) nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 notebooks/01_sft_mini.ipynb
 
 data: ## NB2 — preference data prep (~2 min)
 	@$(JUPYTEXT) --to notebook --update notebooks/02_preference_data.py
-	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/02_preference_data.ipynb
+	@$(JUPYTER) nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 notebooks/02_preference_data.ipynb
 
 dpo: ## NB3 — full DPO training (~30 min T4 / ~20 min A100)
 	@$(JUPYTEXT) --to notebook --update notebooks/03_dpo_train.py
-	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/03_dpo_train.ipynb
+	@$(JUPYTER) nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 notebooks/03_dpo_train.ipynb
 
 eval: ## NB4 — side-by-side comparison + judge
 	@$(JUPYTEXT) --to notebook --update notebooks/04_compare_and_eval.py
-	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/04_compare_and_eval.ipynb
+	@$(JUPYTER) nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 notebooks/04_compare_and_eval.ipynb
 
 deploy: ## NB5 (OPTIONAL/bonus) — merge + GGUF + llama.cpp smoke
 	@$(JUPYTEXT) --to notebook --update notebooks/05_merge_deploy_gguf.py
-	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/05_merge_deploy_gguf.ipynb
+	@$(JUPYTER) nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 notebooks/05_merge_deploy_gguf.ipynb
 
 bench: ## NB6 (OPTIONAL/bonus) — IFEval/GSM8K/MMLU + 4-bar plot (~30 min T4)
 	@$(JUPYTEXT) --to notebook --update notebooks/06_benchmark.py
-	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/06_benchmark.ipynb
+	@$(JUPYTER) nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 notebooks/06_benchmark.ipynb
 
 pipeline: sft data dpo eval report ## Run the 4 CORE notebooks (NB1-NB4, ~30 min T4)
 
