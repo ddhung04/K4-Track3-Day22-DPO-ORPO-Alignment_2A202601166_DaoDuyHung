@@ -41,6 +41,25 @@ make verify             # pre-submission gatekeeper
 
 Yêu cầu: **Python 3.10–3.12**, NVIDIA GPU ≥ 12 GB VRAM (3060/4060 trở lên), CUDA 11.8 hoặc 12.1+.
 
+**Windows PowerShell (RTX 3060 / 4060):** use the GPU-specific setup instead
+of `pip install -r requirements.txt`, which can select an incompatible PyTorch
+wheel on Windows. It installs the graded core (NB1–NB4); GGUF and benchmark
+extras remain optional.
+
+```powershell
+.\setup-windows-gpu.ps1
+.\.venv-gpu\Scripts\python.exe scripts\verify.py --smoke
+```
+
+Select **Python (Day 22 GPU)** as the notebook kernel in VS Code. To execute
+the core notebooks from PowerShell, run the following in order:
+
+```powershell
+.\.venv-gpu\Scripts\jupytext.exe --to notebook --update notebooks\01_sft_mini.py
+.\.venv-gpu\Scripts\jupyter.exe nbconvert --to notebook --execute --inplace notebooks\01_sft_mini.ipynb
+# Repeat the same two commands for 02_preference_data, 03_dpo_train, 04_compare_and_eval.
+```
+
 ### Tất cả lệnh `make`
 
 ```

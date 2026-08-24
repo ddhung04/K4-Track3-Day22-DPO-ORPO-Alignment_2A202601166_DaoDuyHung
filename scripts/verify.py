@@ -213,7 +213,7 @@ def smoke_check(repo: Path) -> int:
         import lm_eval  # noqa: F401
         print(f"  ✓ lm_eval (NB6 benchmark suite)")
     except ImportError:
-        problems.append("lm_eval missing — pip install -r requirements.txt (NB6 will fail)")
+        print("  ⚠ lm_eval missing — optional NB6 benchmark is unavailable")
 
     print()
     if problems:
