@@ -303,6 +303,25 @@ if judge_results is None:
     json.dumps(judge_results, ensure_ascii=False, indent=2)
 )
 
+# Keep a self-contained markdown artifact in addition to the JSONL.  This is
+# convenient for the submission and makes the 8 × 2 comparison reviewable
+# without opening a notebook.
+judge_by_id = {r["id"]: r for r in judge_results}
+markdown_lines = [
+    "# SFT-only vs SFT+DPO — side-by-side evaluation", "",
+    "| # | Category | Prompt | SFT-only | SFT+DPO | Winner |",
+    "|---:|---|---|---|---|---|",
+]
+for p, sft, dpo in zip(EVAL_PROMPTS, sft_outputs, dpo_outputs):
+    verdict = judge_by_id[p["id"]]["winner"]
+    winner = {"A": "SFT-only", "B": "SFT+DPO", "tie": "tie"}.get(verdict, verdict)
+    clean = lambda value: value.replace("|", "\\|").replace("\n", " ")
+    markdown_lines.append(
+        f"| {p['id']} | {p['category']} | {clean(p['prompt'])} | "
+        f"{clean(sft)} | {clean(dpo)} | {winner} |"
+    )
+(EVAL_OUT / "side_by_side.md").write_text("\n".join(markdown_lines) + "\n", encoding="utf-8")
+
 # %% [markdown]
 # ## 6. Win/loss/tie summary
 
@@ -328,6 +347,46 @@ print("=" * 60)
 summary(counter_all, "Overall:", len(judge_results))
 summary(counter_help, "Helpfulness:", 4)
 summary(counter_safe, "Safety:", 4)
+
+summary_payload = {
+    "judge": (
+        os.environ.get("JUDGE_MODEL", "gpt-4o-mini") if os.environ.get("OPENAI_API_KEY")
+        else os.environ.get("JUDGE_MODEL", "claude-haiku-4-5") if os.environ.get("ANTHROPIC_API_KEY")
+        else "manual rubric (default ties until reviewed)"
+    ),
+    "overall": {"sft_only_wins": counter_all.get("A", 0), "dpo_wins": counter_all.get("B", 0), "ties": counter_all.get("tie", 0)},
+    "helpfulness": {"sft_only_wins": counter_help.get("A", 0), "dpo_wins": counter_help.get("B", 0), "ties": counter_help.get("tie", 0)},
+    "safety": {"sft_only_wins": counter_safe.get("A", 0), "dpo_wins": counter_safe.get("B", 0), "ties": counter_safe.get("tie", 0)},
+}
+(EVAL_OUT / "evaluation_summary.json").write_text(
+    json.dumps(summary_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+)
+
+# Screenshot #5: an explicit audit trail for the judge or manual rubric.
+verdict_rows = [["#", "Category", "Winner", "Justification"]]
+for result in judge_results:
+    verdict_rows.append([
+        result["id"], result["category"],
+        {"A": "SFT-only", "B": "SFT+DPO", "tie": "tie"}.get(result["winner"], result["winner"]),
+        textwrap.shorten(result.get("justification", ""), width=85),
+    ])
+fig, ax = plt.subplots(figsize=(14, 0.62 * len(verdict_rows) + 1.4))
+ax.axis("off")
+verdict_table = ax.table(
+    cellText=verdict_rows, loc="center", cellLoc="left",
+    colWidths=[0.05, 0.14, 0.14, 0.67],
+)
+verdict_table.auto_set_font_size(False)
+verdict_table.set_fontsize(9)
+verdict_table.scale(1.0, 1.55)
+for j in range(len(verdict_rows[0])):
+    verdict_table[(0, j)].set_facecolor("#2e548a")
+    verdict_table[(0, j)].set_text_props(color="white", weight="bold")
+fig.suptitle(f"Judge / manual-rubric audit — {summary_payload['judge']}", y=0.98, fontsize=12)
+fig.tight_layout()
+fig.savefig(screenshot_dir / "05-manual-rubric.png", dpi=140, bbox_inches="tight")
+plt.show()
+print(f"Saved judge artifact to {screenshot_dir / '05-manual-rubric.png'}")
 
 # %% [markdown]
 # ## 7. Vibe-coding callout

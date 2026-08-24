@@ -68,15 +68,16 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Stack SFT-mini → DPO adapters
-SFT_PATH = REPO_ROOT / "adapters" / "sft-mini"
-model = PeftModel.from_pretrained(model, str(SFT_PATH))
-print(f"Loaded SFT-mini adapter from {SFT_PATH}")
+# ``adapters/dpo`` is standalone: it starts from SFT weights and is optimized
+# with DPO in NB3. Loading only DPO avoids applying SFT twice during merge.
+model = PeftModel.from_pretrained(model, str(DPO_PATH))
+print(f"Loaded standalone DPO adapter from {DPO_PATH}")
 
 # %% [markdown]
 # > **Note:** The DPO adapter trained in NB3 stacks on top of SFT. To get a fully
-# > aligned merged model, we apply both adapters before merging. Unsloth's
-# > `save_pretrained_merged` handles the SFT + DPO + base merge in one shot.
+# > aligned merged model, we apply the standalone DPO adapter before merging.
+# > It already includes the SFT initialization; applying SFT a second time
+# > would incorrectly double its LoRA deltas.
 
 # %% [markdown]
 # ## 2. Save merged FP16 weights
@@ -189,6 +190,27 @@ response = llm.create_chat_completion(
 print(f"PROMPT:\n  {SMOKE_PROMPT}\n")
 print(f"RESPONSE (Q4_K_M GGUF, llama-cpp-python):\n  {response['choices'][0]['message']['content']}")
 print(f"\nTokens used: {response['usage']}")
+
+# Save a compact, publishable version of the smoke-test output.  It includes
+# both the exact Q4_K_M file loaded and its generated response.
+import matplotlib.pyplot as plt
+import textwrap
+
+screenshot_dir = REPO_ROOT / "submission" / "screenshots"
+screenshot_dir.mkdir(parents=True, exist_ok=True)
+fig, ax = plt.subplots(figsize=(12, 4.5))
+ax.axis("off")
+smoke_text = (
+    f"GGUF smoke test\nLoaded: {gguf_path.name}\n\n"
+    f"Prompt: {SMOKE_PROMPT}\n\n"
+    "Response:\n"
+    + "\n".join(textwrap.wrap(response["choices"][0]["message"]["content"], width=95))
+)
+ax.text(0.02, 0.96, smoke_text, va="top", ha="left", fontsize=10, family="monospace")
+fig.tight_layout()
+fig.savefig(screenshot_dir / "06-gguf-smoke.png", dpi=140, bbox_inches="tight")
+plt.show()
+print(f"Saved deployment evidence to {screenshot_dir / '06-gguf-smoke.png'}")
 
 # %% [markdown]
 # ## 5. Optional — vLLM serving (BigGPU only)

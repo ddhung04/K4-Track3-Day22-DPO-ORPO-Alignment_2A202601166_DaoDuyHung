@@ -29,11 +29,13 @@ from pathlib import Path
 COMPUTE_TIER = os.environ.get("COMPUTE_TIER", "T4").upper()
 
 if COMPUTE_TIER == "T4":
-    PREF_SLICE = 1000
+    # 2k pairs is the reference lab run. The override enables a small smoke
+    # run before committing to a full T4 session.
+    PREF_SLICE = int(os.environ.get("PREF_SLICE", "2000"))
     MAX_LEN = 512
     MAX_PROMPT_LEN = 256
 else:
-    PREF_SLICE = 5000
+    PREF_SLICE = int(os.environ.get("PREF_SLICE", "5000"))
     MAX_LEN = 1024
     MAX_PROMPT_LEN = 512
 

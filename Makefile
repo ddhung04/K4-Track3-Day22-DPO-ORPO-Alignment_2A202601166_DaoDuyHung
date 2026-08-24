@@ -2,11 +2,16 @@
 ## Tier-aware via COMPUTE_TIER (T4 default, BIGGPU optional).
 
 VENV     := .venv
-PY       := $(VENV)/bin/python
-PIP      := $(VENV)/bin/pip
-JUPYTEXT := $(VENV)/bin/jupytext
-PYTEST   := $(VENV)/bin/pytest
-JUPYTER  := $(VENV)/bin/jupyter
+ifeq ($(OS),Windows_NT)
+  VENV_BIN := $(VENV)/Scripts
+else
+  VENV_BIN := $(VENV)/bin
+endif
+PY       := $(VENV_BIN)/python
+PIP      := $(VENV_BIN)/pip
+JUPYTEXT := $(VENV_BIN)/jupytext
+PYTEST   := $(VENV_BIN)/pytest
+JUPYTER  := $(VENV_BIN)/jupyter
 
 # If running on Colab there's no venv — fall back to system python.
 ifeq ($(wildcard $(PY)),)
@@ -66,7 +71,7 @@ bench: ## NB6 (OPTIONAL/bonus) — IFEval/GSM8K/MMLU + 4-bar plot (~30 min T4)
 	@$(JUPYTEXT) --to notebook --update notebooks/06_benchmark.py
 	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/06_benchmark.ipynb
 
-pipeline: sft data dpo eval ## Run the 4 CORE notebooks (NB1-NB4, ~30 min T4)
+pipeline: sft data dpo eval report ## Run the 4 CORE notebooks (NB1-NB4, ~30 min T4)
 
 pipeline-full: sft data dpo eval deploy bench ## Core + OPTIONAL NB5 (GGUF) + NB6 (benchmark)
 
@@ -86,6 +91,9 @@ beta-sweep: ## Re-run NB3 with beta in {0.05, 0.1, 0.5}
 
 verify: ## Pre-submission gatekeeper — checks artifacts + REFLECTION edited
 	@$(PY) scripts/verify.py
+
+report: ## Generate REFLECTION.md from the completed NB3/NB4 artifacts
+	@$(PY) scripts/generate_submission_report.py
 
 lab: ## Open Jupyter Lab (laptop only)
 	@$(JUPYTEXT) --to notebook --update notebooks/*.py 2>/dev/null || true

@@ -63,6 +63,27 @@ assert torch.cuda.is_available(), "DPO needs a CUDA GPU. See HARDWARE-GUIDE.md."
 gpu = torch.cuda.get_device_properties(0)
 print(f"GPU: {gpu.name}  ({gpu.total_memory / 1e9:.1f} GB)")
 
+# Submission evidence that does not depend on a manually cropped browser tab.
+# It records the actual accelerator and the tier selected for this run.
+import matplotlib.pyplot as plt
+
+screenshot_dir = REPO_ROOT / "submission" / "screenshots"
+screenshot_dir.mkdir(parents=True, exist_ok=True)
+fig, ax = plt.subplots(figsize=(9, 2.3))
+ax.axis("off")
+ax.text(
+    0.03, 0.82,
+    "Lab 22 — GPU setup\n"
+    f"GPU: {gpu.name}\n"
+    f"VRAM: {gpu.total_memory / 1e9:.1f} GB  |  CUDA: {torch.version.cuda}  |  tier: {COMPUTE_TIER}\n"
+    f"PyTorch: {torch.__version__}",
+    va="top", ha="left", family="monospace", fontsize=12,
+)
+fig.tight_layout()
+fig.savefig(screenshot_dir / "01-setup-gpu.png", dpi=150, bbox_inches="tight")
+plt.close(fig)
+print(f"Saved GPU evidence to {screenshot_dir / '01-setup-gpu.png'}")
+
 # %% [markdown]
 # ## 1. Load base model with Unsloth
 #
@@ -174,8 +195,6 @@ print(f"\nFinal train loss: {train_result.training_loss:.4f}")
 # ### 3a. Plot loss curve (deliverable: `02_sft_loss.png`)
 
 # %%
-import matplotlib.pyplot as plt
-
 losses = [log["loss"] for log in trainer.state.log_history if "loss" in log]
 steps = [log["step"] for log in trainer.state.log_history if "loss" in log]
 
@@ -186,8 +205,6 @@ ax.set_ylabel("Loss")
 ax.set_title(f"SFT-mini loss · {COMPUTE_TIER} · {BASE_MODEL.split('/')[-1]} · {SFT_SLICE} samples")
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
-screenshot_dir = REPO_ROOT / "submission" / "screenshots"
-screenshot_dir.mkdir(parents=True, exist_ok=True)
 fig.savefig(screenshot_dir / "02-sft-loss.png", dpi=120)
 plt.show()
 

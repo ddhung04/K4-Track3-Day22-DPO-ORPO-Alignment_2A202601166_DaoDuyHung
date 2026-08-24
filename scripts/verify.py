@@ -23,6 +23,14 @@ TEMPLATE_MARKERS = [
     r"_Answer here\._?\s*$",
     r"<e\.g\., Free Colab T4 16GB",
 ]
+REQUIRED_REFLECTION_SECTIONS = [
+    "## 1. Setup",
+    "## 2. DPO experiment results",
+    "## 3. Reward curves analysis",
+    "## 4. Qualitative comparison",
+    "## 5. β trade-off",
+    "## 6. Personal reflection",
+]
 
 
 def check_file(path: Path, label: str, problems: list[str]) -> bool:
@@ -64,6 +72,37 @@ def check_reflection_edited(path: Path, problems: list[str]) -> bool:
             f"Fill in your own numbers and answers."
         )
         return False
+    missing = [heading for heading in REQUIRED_REFLECTION_SECTIONS if heading not in text]
+    if missing:
+        problems.append(f"INCOMPLETE submission/REFLECTION.md missing sections: {', '.join(missing)}")
+        return False
+    # The required analyses must be substantial rather than just a heading and
+    # a screenshot link. Count the text until the next H2 heading.
+    for heading in ("## 3. Reward curves analysis", "## 6. Personal reflection"):
+        body = text.split(heading, 1)[1].split("\n## ", 1)[0]
+        words = re.findall(r"\b[\wÀ-ỹ][\wÀ-ỹ'-]*\b", body)
+        if len(words) < 150:
+            problems.append(
+                f"TOO SHORT submission/REFLECTION.md {heading}: {len(words)} words, need at least 150"
+            )
+            return False
+    return True
+
+
+def check_adapter_config(path: Path, label: str, problems: list[str], *, sft: bool = False) -> bool:
+    if not check_file(path, label, problems):
+        return False
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        problems.append(f"CORRUPT  {label}: {exc}")
+        return False
+    if sft and (config.get("lora_alpha") != 32 or config.get("r") != 16):
+        problems.append(
+            f"WRONG    {label}: expected lora_alpha=32 and r=16, got "
+            f"lora_alpha={config.get('lora_alpha')}, r={config.get('r')}"
+        )
+        return False
     return True
 
 
@@ -83,9 +122,19 @@ def check_dpo_metrics(repo: Path, problems: list[str]) -> bool:
         return True
     if gap <= 0:
         problems.append(
-            f"WARN     end_reward_gap = {gap:+.3f} (≤ 0). DPO didn't separate chosen from rejected. "
-            f"Check NB3 output. (Not a hard fail — explain in REFLECTION § 3 + § 5.)"
+            f"FAILED   end_reward_gap = {gap:+.3f} (≤ 0). DPO did not separate chosen from rejected."
         )
+        return False
+    start_gap = m.get("start_reward_gap")
+    if start_gap is None:
+        problems.append("MISSING  start_reward_gap in dpo_metrics.json; rerun updated NB3")
+        return False
+    if gap <= start_gap:
+        problems.append(
+            f"FAILED   reward gap did not increase: start={start_gap:+.3f}, end={gap:+.3f}. "
+            "Try beta=0.05 or lr=1e-6, then rerun NB3."
+        )
+        return False
     return True
 
 
@@ -190,10 +239,18 @@ def main() -> int:
         check_file(repo / "notebooks" / nb, f"notebook {nb}", problems)
 
     # Adapter outputs
-    check_file(repo / "adapters" / "sft-mini" / "adapter_config.json",
-               "SFT-mini adapter config (NB1 output)", problems)
-    check_file(repo / "adapters" / "dpo" / "adapter_config.json",
-               "DPO adapter config (NB3 output)", problems)
+    check_adapter_config(repo / "adapters" / "sft-mini" / "adapter_config.json",
+                         "SFT-mini adapter config (NB1 output)", problems, sft=True)
+    check_adapter_config(repo / "adapters" / "dpo" / "adapter_config.json",
+                         "DPO adapter config (NB3 output)", problems)
+    dpo_provenance = repo / "adapters" / "dpo" / "dpo_training_config.json"
+    if check_file(dpo_provenance, "DPO training provenance (NB3 output)", problems):
+        try:
+            provenance = json.loads(dpo_provenance.read_text(encoding="utf-8"))
+            if provenance.get("method") != "DPO":
+                problems.append("WRONG    adapters/dpo/dpo_training_config.json method must be DPO")
+        except json.JSONDecodeError as exc:
+            problems.append(f"CORRUPT  adapters/dpo/dpo_training_config.json — {exc}")
 
     # DPO metrics
     check_dpo_metrics(repo, problems)
@@ -217,7 +274,7 @@ def main() -> int:
 
     # Submission artifacts (core)
     check_reflection_edited(repo / "submission" / "REFLECTION.md", problems)
-    n_shots = check_screenshots(repo / "submission" / "screenshots", min_count=3, problems=problems)
+    n_shots = check_screenshots(repo / "submission" / "screenshots", min_count=6, problems=problems)
     if n_shots:
         print(f"  ✓ submission/screenshots/ has {n_shots} image(s)")
 

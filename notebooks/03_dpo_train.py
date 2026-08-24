@@ -79,7 +79,13 @@ assert torch.cuda.is_available(), "DPO needs a CUDA GPU. See HARDWARE-GUIDE.md."
 from unsloth import FastLanguageModel
 from peft import PeftModel
 
-# Policy — gets new DPO LoRA adapter on top of SFT LoRA
+# Load the same SFT checkpoint twice as named adapters. ``default`` is the
+# trainable policy; ``reference`` stays frozen. This is TRL's PEFT
+# multi-adapter pattern: it preserves the SFT policy as the DPO reference
+# without keeping a second 4-bit base model in VRAM.
+#
+# The train adapter starts from SFT weights. Saving it after DPO therefore
+# creates a standalone ``adapters/dpo`` checkpoint for NB4 and NB5.
 model, tokenizer = FastLanguageModel.from_pretrained(
     model_name=BASE_MODEL,
     max_seq_length=MAX_LEN,
@@ -89,35 +95,23 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Load SFT adapter on top of base
+# ``default`` is intentional: PEFT writes a selected default adapter at the
+# root of DPO_OUT, so DPO_OUT/adapter_config.json is the required artifact.
 model = PeftModel.from_pretrained(model, str(SFT_PATH), is_trainable=True)
-print(f"Policy: {model.__class__.__name__} with SFT adapter loaded")
-
-# %%
-# Wrap policy with NEW LoRA adapter for DPO updates (don't merge SFT — keep stacked)
-# Unsloth re-applies LoRA on top of the existing PeftModel.
-model = FastLanguageModel.get_peft_model(
-    model,
-    r=16,
-    lora_alpha=32,
-    lora_dropout=0.0,
-    bias="none",
-    target_modules=[
-        "q_proj", "k_proj", "v_proj", "o_proj",
-        "gate_proj", "up_proj", "down_proj",
-    ],
-    use_gradient_checkpointing="unsloth",
-    random_state=42,
-    use_rslora=False,
-    loftq_config=None,
-)
-print(f"Trainable params (DPO LoRA): {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
+model.load_adapter(str(SFT_PATH), adapter_name="reference", is_trainable=False)
+model.set_adapter("default")
+model.config.use_cache = False
+model.gradient_checkpointing_enable()
+model.enable_input_require_grads()
+print("Loaded SFT adapter twice: policy=default (trainable), reference=frozen")
+print(f"Trainable params (DPO policy): {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
 
 # %% [markdown]
-# > **Why no separate `ref_model=` argument?** Modern TRL (≥ 0.12) auto-detects
-# > PEFT models and uses the *base model without the adapter* as the reference.
-# > That's the same memory layout: 1 base + 2 adapter sets in VRAM. No deepcopy
-# > needed.
+# > **Why no separate `ref_model=` argument?** Policy and reference are two
+# > named copies of the **SFT adapter** on one quantized base model. TRL swaps
+# > `default` and `reference` during its forward passes. This is more faithful
+# > than disabling the adapter (which would compare against the raw base model)
+# > and only costs one additional LoRA-sized adapter in VRAM.
 
 # %% [markdown]
 # ## 2. Build DPOConfig (deck §5.2 hyperparameters)
@@ -142,8 +136,12 @@ dpo_config = DPOConfig(
     bf16=torch.cuda.is_bf16_supported(),
     fp16=not torch.cuda.is_bf16_supported(),
     seed=42,
+    gradient_checkpointing=True,
+    gradient_checkpointing_kwargs={"use_reentrant": False},
     loss_type="sigmoid",         # DPO standard (alternatives: ipo, hinge, kto)
     report_to="none",
+    model_adapter_name="default",
+    ref_adapter_name="reference",
 )
 
 print(f"DPOConfig: beta={dpo_config.beta}  lr={dpo_config.learning_rate}  loss_type={dpo_config.loss_type}")
@@ -166,7 +164,7 @@ from trl import DPOTrainer
 
 trainer = DPOTrainer(
     model=model,
-    ref_model=None,                # auto-derived from PEFT base
+    ref_model=None,                # TRL swaps to ref_adapter_name above
     args=dpo_config,
     train_dataset=pref_ds,
     processing_class=tokenizer,
@@ -242,12 +240,15 @@ if chosen_col and rejected_col and len(logs) >= 5:
     last_rejected = logs[rejected_col].iloc[-5:].mean()
     last_gap = last_chosen - last_rejected
     first_chosen = logs[chosen_col].iloc[:5].mean()
+    first_rejected = logs[rejected_col].iloc[:5].mean()
+    first_gap = first_chosen - first_rejected
 
     chosen_delta = last_chosen - first_chosen
 
     print(f"END  chosen reward:    {last_chosen:+.3f}")
     print(f"END  rejected reward:  {last_rejected:+.3f}")
     print(f"END  reward gap:       {last_gap:+.3f}")
+    print(f"Δ reward gap:          {last_gap - first_gap:+.3f}")
     print()
 
     if last_gap < 0:
@@ -268,7 +269,10 @@ if chosen_col and rejected_col and len(logs) >= 5:
 # ## 6. Save adapter
 
 # %%
-trainer.model.save_pretrained(str(DPO_OUT))
+# Persist only the policy adapter. It includes its SFT initialization plus DPO
+# updates, so inference needs only base + adapters/dpo (no SFT stacking).
+trainer.model.set_adapter("default", inference_mode=True)
+trainer.model.save_pretrained(str(DPO_OUT), selected_adapters=["default"])
 tokenizer.save_pretrained(str(DPO_OUT))
 print(f"Saved DPO adapter to {DPO_OUT}")
 
@@ -285,8 +289,28 @@ metrics = {
     "end_chosen_reward": float(last_chosen) if chosen_col else None,
     "end_rejected_reward": float(last_rejected) if rejected_col else None,
     "end_reward_gap": float(last_gap) if chosen_col and rejected_col else None,
+    "start_chosen_reward": float(first_chosen) if chosen_col and rejected_col else None,
+    "start_rejected_reward": float(first_rejected) if chosen_col and rejected_col else None,
+    "start_reward_gap": float(first_gap) if chosen_col and rejected_col else None,
 }
 (DPO_OUT / "dpo_metrics.json").write_text(json.dumps(metrics, indent=2))
+# Preserve raw reward history so the reported increase can be audited instead
+# of inferred only from a screenshot.
+if chosen_col and rejected_col:
+    logs[[c for c in ["step", "loss", chosen_col, rejected_col] if c in logs]].to_json(
+        DPO_OUT / "dpo_training_log.jsonl", orient="records", lines=True
+    )
+# PEFT config holds only LoRA architecture. Keep DPO provenance separately so
+# reviewers can distinguish this checkpoint without breaking PEFT loading.
+(DPO_OUT / "dpo_training_config.json").write_text(json.dumps({
+    "method": "DPO",
+    "initial_adapter": str(SFT_PATH),
+    "reference_adapter": "reference",
+    "policy_adapter": "default",
+    "beta": BETA,
+    "learning_rate": LR,
+    "epochs": EPOCHS,
+}, indent=2))
 print(f"Wrote metrics to {DPO_OUT / 'dpo_metrics.json'}")
 
 # %% [markdown]

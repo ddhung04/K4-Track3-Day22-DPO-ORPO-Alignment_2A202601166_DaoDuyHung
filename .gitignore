@@ -24,6 +24,25 @@ gguf/
 runs/
 wandb/
 
+# Keep small, reproducible submission evidence in Git. Adapter weight tensors
+# remain ignored (Option C is valid), but the configs/metrics and prepared
+# preference parquet let a reviewer run the gatekeeper from a fresh clone.
+!data/pref/
+data/pref/*
+!data/pref/train.parquet
+!data/pref/eval.parquet
+
+!adapters/sft-mini/
+adapters/sft-mini/*
+!adapters/sft-mini/adapter_config.json
+
+!adapters/dpo/
+adapters/dpo/*
+!adapters/dpo/adapter_config.json
+!adapters/dpo/dpo_metrics.json
+!adapters/dpo/dpo_training_config.json
+!adapters/dpo/dpo_training_log.jsonl
+
 # HuggingFace cache (Colab + local — model weights are huge)
 .cache/
 hf_cache/

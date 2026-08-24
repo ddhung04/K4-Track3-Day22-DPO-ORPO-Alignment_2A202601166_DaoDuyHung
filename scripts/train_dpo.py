@@ -59,14 +59,14 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # Policy and frozen reference are two copies of the SFT adapter on one
+    # quantized base model; this is TRL's memory-efficient PEFT DPO pattern.
     model = PeftModel.from_pretrained(model, args.sft_path, is_trainable=True)
-    model = FastLanguageModel.get_peft_model(
-        model, r=16, lora_alpha=32, lora_dropout=0.0, bias="none",
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                        "gate_proj", "up_proj", "down_proj"],
-        use_gradient_checkpointing="unsloth",
-        random_state=42, use_rslora=False, loftq_config=None,
-    )
+    model.load_adapter(args.sft_path, adapter_name="reference", is_trainable=False)
+    model.set_adapter("default")
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable()
+    model.enable_input_require_grads()
 
     config = DPOConfig(
         output_dir=str(output.parent / f"{output.name}-checkpoints"),
@@ -85,8 +85,12 @@ def main():
         bf16=torch.cuda.is_bf16_supported(),
         fp16=not torch.cuda.is_bf16_supported(),
         seed=42,
+        gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
         loss_type="sigmoid",
         report_to="none",
+        model_adapter_name="default",
+        ref_adapter_name="reference",
     )
 
     pref = Dataset.from_parquet(args.pref_path)
@@ -96,7 +100,8 @@ def main():
     )
     train_result = trainer.train()
 
-    trainer.model.save_pretrained(str(output))
+    trainer.model.set_adapter("default", inference_mode=True)
+    trainer.model.save_pretrained(str(output), selected_adapters=["default"])
     tokenizer.save_pretrained(str(output))
 
     # Headline metrics
@@ -118,8 +123,24 @@ def main():
     }
     if metrics["end_chosen_reward"] is not None and metrics["end_rejected_reward"] is not None:
         metrics["end_reward_gap"] = metrics["end_chosen_reward"] - metrics["end_rejected_reward"]
+        metrics["start_chosen_reward"] = float(logs[chosen_col].iloc[:5].mean())
+        metrics["start_rejected_reward"] = float(logs[rejected_col].iloc[:5].mean())
+        metrics["start_reward_gap"] = metrics["start_chosen_reward"] - metrics["start_rejected_reward"]
 
     (output / "dpo_metrics.json").write_text(json.dumps(metrics, indent=2))
+    if chosen_col and rejected_col:
+        logs[[c for c in ["step", "loss", chosen_col, rejected_col] if c in logs]].to_json(
+            output / "dpo_training_log.jsonl", orient="records", lines=True
+        )
+    (output / "dpo_training_config.json").write_text(json.dumps({
+        "method": "DPO",
+        "initial_adapter": str(args.sft_path),
+        "reference_adapter": "reference",
+        "policy_adapter": "default",
+        "beta": args.beta,
+        "learning_rate": args.lr,
+        "epochs": args.epochs,
+    }, indent=2))
     print(f"\nFinal loss:     {train_result.training_loss:.4f}")
     if "end_reward_gap" in metrics:
         print(f"End reward gap: {metrics['end_reward_gap']:+.3f}")
