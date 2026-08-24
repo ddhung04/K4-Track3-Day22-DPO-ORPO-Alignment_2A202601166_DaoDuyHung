@@ -92,6 +92,9 @@ def export_cells() -> list:
         ),
         new_code_cell(
             "import zipfile\n"
+            "# This is the same pre-submission gate as `make verify`; it must pass\n"
+            "# before artifacts are exported.\n"
+            "subprocess.run([sys.executable, str(WORK / 'scripts' / 'verify.py')], check=True)\n"
             "archive = Path('/content/lab22-submission-artifacts.zip')\n"
             "include = ['adapters/sft-mini', 'adapters/dpo', 'data/pref', 'data/eval', 'submission']\n"
             "with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as zf:\n"
