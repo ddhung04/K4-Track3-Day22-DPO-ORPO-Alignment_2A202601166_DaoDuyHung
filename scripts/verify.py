@@ -15,6 +15,14 @@ import re
 import sys
 from pathlib import Path
 
+# Windows PowerShell 5 commonly defaults to cp1252, which cannot render the
+# Vietnamese/Unicode diagnostics in this lab. Make the gatekeeper report its
+# checklist instead of crashing before it reaches the real failures.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 TEMPLATE_MARKERS = [
     r"<Họ Tên>",
     r"<A20-K1 / A20-K2",
