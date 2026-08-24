@@ -388,6 +388,32 @@ fig.savefig(screenshot_dir / "05-manual-rubric.png", dpi=140, bbox_inches="tight
 plt.show()
 print(f"Saved judge artifact to {screenshot_dir / '05-manual-rubric.png'}")
 
+# Screenshot #6 is a compact core-run handoff. It deliberately does not
+# depend on optional GGUF/benchmark packages, so a T4 core submission can pass
+# the gatekeeper before running the expensive bonus notebooks.
+dpo_metrics_path = DPO_PATH / "dpo_metrics.json"
+dpo_metrics = json.loads(dpo_metrics_path.read_text()) if dpo_metrics_path.exists() else {}
+summary_text = (
+    "Lab 22 core submission summary\n\n"
+    f"Tier: {COMPUTE_TIER}\n"
+    f"DPO final loss: {dpo_metrics.get('final_train_loss', float('nan')):.4f}\n"
+    f"Reward gap: {dpo_metrics.get('start_reward_gap', float('nan')):+.4f} "
+    f"→ {dpo_metrics.get('end_reward_gap', float('nan')):+.4f}\n"
+    f"Judge: {summary_payload['judge']}\n"
+    f"SFT wins / DPO wins / ties: {overall['sft_only_wins']} / "
+    f"{overall['dpo_wins']} / {overall['ties']}\n\n"
+    "Evidence: 01-setup-gpu.png, 02-sft-loss.png, "
+    "03-dpo-reward-curves.png, 04-side-by-side-table.png, "
+    "05-manual-rubric.png"
+)
+fig, ax = plt.subplots(figsize=(11, 4.5))
+ax.axis("off")
+ax.text(0.04, 0.94, summary_text, va="top", ha="left", fontsize=13, family="monospace")
+fig.tight_layout()
+fig.savefig(screenshot_dir / "06-submission-summary.png", dpi=140, bbox_inches="tight")
+plt.show()
+print(f"Saved core summary to {screenshot_dir / '06-submission-summary.png'}")
+
 # %% [markdown]
 # ## 7. Vibe-coding callout
 #

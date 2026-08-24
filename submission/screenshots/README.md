@@ -9,8 +9,12 @@ Drop the following PNG/JPG files into this folder before submitting. Filenames a
 3. **`03-dpo-reward-curves.png`** — Notebook 03 dual-curve plot: `chosen_rewards` and `rejected_rewards` plotted separately, plus their gap. This is THE diagnostic — if the only thing visible is "gap going up", you'll lose points (deck §3.4: chosen reward decreasing while gap grows is likelihood displacement, not winning).
 4. **`04-side-by-side-table.png`** — Notebook 04 markdown table with ≥ 8 prompts × 2 model outputs (SFT vs SFT+DPO). Table must show category labels (helpfulness vs safety) and the judge's call (or your manual call).
 5. **`05-judge-output.png`** *(or `05-manual-rubric.png`)* — If you used the API judge (gpt-4o-mini / claude-haiku), capture the judge's verbatim verdict for at least 3 of your 8 prompts. If you used manual rubric mode, capture your filled-in rubric instead.
-6. **`06-gguf-smoke.png`** — Notebook 05 final cell: llama-cpp-python loading the merged GGUF and producing a coherent VN response to a smoke prompt. Must show the `Q4_K_M.gguf` filename in the load line + the actual generated tokens.
-7. **`07-benchmark-comparison.png`** — Notebook 06 4-bar chart: SFT-only vs SFT+DPO scores across IFEval / GSM8K / MMLU / AlpacaEval-lite. Bars labeled with absolute scores; deltas annotated above each pair. This is THE quantitative summary of whether DPO worked — it should be the most-looked-at image in your submission.
+6. **`06-submission-summary.png`** — Core-run handoff with the DPO reward-gap change and win/loss/tie count. It is generated automatically after NB4, so the core lab does not wait for GGUF compilation.
+
+## Optional deployment and benchmark shots
+
+7. **`06-gguf-smoke.png`** — Notebook 05 final cell: llama-cpp-python loading the merged GGUF and producing a coherent VN response to a smoke prompt. Must show the `Q4_K_M.gguf` filename in the load line + the actual generated tokens.
+8. **`07-benchmark-comparison.png`** — Notebook 06 4-bar chart: SFT-only vs SFT+DPO scores across IFEval / GSM8K / MMLU / AlpacaEval-lite. Bars labeled with absolute scores; deltas annotated above each pair. This is THE quantitative summary of whether DPO worked — it should be the most-looked-at image in your submission.
 
 ## Optional — for the +20 bonus rigor add-ons (mentioned in `rubric.md`)
 

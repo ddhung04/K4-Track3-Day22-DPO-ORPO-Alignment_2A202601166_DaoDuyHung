@@ -21,7 +21,6 @@ CORE = [
     "03_dpo_train.py",
     "04_compare_and_eval.py",
 ]
-BONUS = "05_merge_deploy_gguf.py"
 REPO_URL = "https://github.com/ddhung04/K4-Track3-Day22-DPO-ORPO-Alignment_2A202601166_DaoDuyHung.git"
 
 
@@ -52,7 +51,16 @@ def setup_cells(tier: str) -> list:
             "else:\n"
             "    subprocess.run(['git', 'clone', REPO_URL, str(WORK)], check=True)\n"
             "print(f'Repository: {WORK}')\n"
-            "subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(WORK / 'requirements.txt')], check=True)\n"
+            "# Core only: do not compile llama-cpp-python or install lm-eval here.\n"
+            "# Those are NB5/NB6 bonus dependencies and can make a T4 runtime\n"
+            "# appear stuck for many minutes before any training begins.\n"
+            "core_packages = [\n"
+            "    'unsloth', 'trl>=0.12,<0.20', 'peft>=0.13,<1.0',\n"
+            "    'accelerate>=1.1,<2.0', 'bitsandbytes>=0.44,<1.0',\n"
+            "    'datasets>=3.1,<4.0', 'matplotlib>=3.9,<4.0',\n"
+            "    'pandas>=2.2,<3.0', 'pyarrow>=17,<22',\n"
+            "]\n"
+            "subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', '--no-cache-dir', *core_packages], check=True)\n"
             "os.chdir(WORK / 'notebooks')\n"
             "print(f'Working directory: {Path.cwd()}')"
         ),
@@ -125,8 +133,14 @@ def build_one(tier: str, destination: Path) -> None:
     for source in CORE:
         notebook.cells.extend(jupytext.read(REPO / "notebooks" / source).cells)
     notebook.cells.extend(report_cells())
-    notebook.cells.extend(jupytext.read(REPO / "notebooks" / BONUS).cells)
     notebook.cells.extend(export_cells())
+    notebook.cells.append(new_markdown_cell(
+        "## Optional NB5 — GGUF deployment\n\n"
+        "NB5/NB6 are intentionally not run by this core notebook. They require "
+        "additional packages (notably a `llama-cpp-python` compile) and can be "
+        "run later from `notebooks/05_merge_deploy_gguf.ipynb` after the core "
+        "artifacts have been exported."
+    ))
     nbformat.write(notebook, destination)
     print(f"Wrote {destination.relative_to(REPO)} ({len(notebook.cells)} cells)")
 
